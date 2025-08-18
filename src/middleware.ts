@@ -1,4 +1,3 @@
-// src/middleware.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
@@ -11,12 +10,10 @@ export async function middleware(req: NextRequest) {
     {
       cookies: {
         get(name: string) {
-          // Next 15: renvoyer string | null (pas undefined)
           const cookie = req.cookies.get(name);
-          return cookie?.value ?? null;
+          return cookie ? cookie.value : null;
         },
         set(name: string, value: string, options: CookieOptions) {
-          // Écriture côté middleware → passer par res.cookies
           res.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
@@ -26,13 +23,10 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
+  const { data: { session } } = await supabase.auth.getSession();
   const { pathname } = req.nextUrl;
 
-  // 1) Home : si loggé → route vers dashboard selon rôle
+  // Home: si loggé -> route selon rôle
   if (pathname === "/") {
     if (session?.user) {
       const { data: profile } = await supabase
@@ -40,27 +34,21 @@ export async function middleware(req: NextRequest) {
         .select("role")
         .eq("user_id", session.user.id)
         .single();
-
-      const target =
-        profile?.role === "ADMIN" ? "/admin/interventions" : "/tech/interventions";
+      const target = profile?.role === "ADMIN" ? "/admin/interventions" : "/tech/interventions";
       return NextResponse.redirect(new URL(target, req.url));
     }
-    return res; // visiteur non loggé -> page publique
+    return res;
   }
 
-  // 2) Protéger les routes privées
-  const isProtected =
-    pathname.startsWith("/tech") ||
-    pathname.startsWith("/admin") ||
-    pathname.startsWith("/(protected)");
-
+  // Zones protégées
+  const isProtected = pathname.startsWith("/tech") || pathname.startsWith("/admin");
   if (isProtected && !session?.user) {
     const url = new URL("/sign-in", req.url);
     url.searchParams.set("redirectTo", pathname);
     return NextResponse.redirect(url);
   }
 
-  // 3) Interdire l’accès aux pages d’auth quand déjà loggé
+  // Empêcher l’accès aux pages d’auth quand loggé
   const isAuthPage = pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up");
   if (isAuthPage && session?.user) {
     return NextResponse.redirect(new URL("/", req.url));

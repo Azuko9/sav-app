@@ -1,30 +1,25 @@
-"use client";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+// src/app/page.tsx (SERVER COMPONENT)
+import { redirect } from "next/navigation";
+import { createSupabaseServer } from "@/lib/supabase/server";
 
-export default function Home() {
-  const router = useRouter();
+export default async function Home() {
+  const supabase = await createSupabaseServer();
 
-  useEffect(() => {
-    const run = async () => {
-      const supabase = createClient();
+  // 1) Pas connecté → /sign-in
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) redirect("/sign-in");
 
-      // 1) pas connecté → /login
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.replace("/login");
+  // 2) Connecté → rôle depuis profiles(user_id)
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", session.user.id) // ✅ bonne colonne
+    .single();
 
-      // 2) connecté → route selon rôle
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
+  const target = profile?.role === "ADMIN"
+    ? "/admin/interventions"
+    : "/tech/interventions";
 
-      router.replace(profile?.role === "ADMIN" ? "/admin" : "/tech");
-    };
-    run();
-  }, [router]);
-
-  return null; // écran neutre le temps de la redirection
+  redirect(target);
 }
+
